@@ -1,10 +1,19 @@
-from prettytable import PrettyTable
+from functools import reduce
+
+from hashing import find_valid_hash, gen_hash, is_valid_hash
 
 
-def get_block_hash(block, previous_hash):
-    tx_hash = '-'.join(
-        f"{tx['sender']},{tx['recipient']},{tx['amount']}" for tx in block['transactions'])
-    return f"{previous_hash}|{block['index']}-{tx_hash}"
+def get_block_transaction_str(index, transactions, pre_hash=''):
+    """Get transaction string of a block.
+
+    Arguments:
+    index -- block's index.
+    transactions -- list of block transaction.
+    pre_hash -- previous block's hash.
+    """
+    tx_str = '-'.join([
+        f"{tx['sender']},{tx['recipient']},{tx['amount']}" for tx in transactions])
+    return f"{pre_hash}|{index}-{tx_str}"
 
 
 genesis_block = {
@@ -17,11 +26,16 @@ genesis_block = {
         {'sender': 'GENESIS', 'recipient': 'Tony', 'amount': 1000},
     ],
 }
-genesis_block['hash'] = get_block_hash(genesis_block, '')
+nonce, hashed = find_valid_hash(
+    get_block_transaction_str(0, genesis_block['transactions']))
+genesis_block['hash'] = hashed
+genesis_block['nonce'] = nonce
+
 blockchain = None
 block_size = 5
 open_transactions = None
 current_block_index = None
+reward_price = 100
 
 
 def init_blockchain():
@@ -34,11 +48,13 @@ def init_blockchain():
     current_block_index = 1
 
 
-def get_block_values():
+def get_blockchain_values():
+    """Use this function while testing to get current blockchain data"""
     return blockchain, open_transactions, current_block_index, genesis_block
 
 
 def increase_block_ind_if_exceed(sender):
+    """Check if current open block transactions is reaching block's size. If yes, mine a new block and clear open transactions."""
     global current_block_index
     global open_transactions
 
@@ -59,19 +75,24 @@ def mine_block(miner):
     open_tx.append({
         'sender': 'REWARD',
         'recipient': miner,
-        'amount': 100
+        'amount': reward_price
     })
+
     new_block = {
         'index': current_block_index,
         'transactions': open_tx
     }
-    new_block['hash'] = get_block_hash(
-        new_block, blockchain[current_block_index-1]['hash'])
+    nonce, hashed = find_valid_hash(get_block_transaction_str(
+        current_block_index, open_tx, blockchain[current_block_index-1]['hash']))
+
+    new_block['hash'] = hashed
+    new_block['nonce'] = nonce
 
     blockchain.append(new_block)
 
 
 def get_balance(participant):
+    """Get balance of a participant"""
     global open_transactions
     global current_block_index
 
@@ -87,7 +108,7 @@ def get_balance(participant):
     open_receive_tx = [tx['amount']
                        for tx in open_tx if tx['recipient'] == participant]
 
-    return sum([amount[0] if len(amount) > 0 else 0 for amount in receive_tx]) + sum(open_receive_tx) - (sum([amount[0] if len(amount) > 0 else 0 for amount in sender_tx]) + sum(open_sender_tx))
+    return reduce(lambda tx_sum, tx: tx_sum+(sum(tx) if len(tx) > 0 else 0), receive_tx, 0) + sum(open_receive_tx) - (reduce(lambda tx_sum, tx: tx_sum + (sum(tx) if len(tx) > 0 else 0), sender_tx, 0) + sum(open_sender_tx))
 
 
 def is_valid_tx(sender, amount):
@@ -109,50 +130,13 @@ def add_transaction(sender, recipient, amount):
 
 
 def verify_blockchain():
-    for (block, index) in enumerate(blockchain):
-        if index == 0:
-            continue
-        if get_block_hash(block, blockchain[index-1].hash) != block.hash:
+    for (index, block) in enumerate(blockchain):
+        tx_str = get_block_transaction_str(
+            index, block['transactions'], '' if index == 0 else blockchain[index-1]['hash'])
+
+        hashed = gen_hash(tx_str, block['nonce'])
+
+        if is_valid_hash(hashed) == False or hashed != block['hash']:
             return False
 
     return True
-
-
-def print_blockchain():
-    draw_arrow = False
-
-    for block in blockchain:
-        if draw_arrow == True:
-            print('  |')
-            print('  |')
-            print('  |')
-            print('  |')
-            print('  V')
-
-        print('Index', block['index'])
-        print('Hash', block['hash'])
-
-        tb = PrettyTable()
-        tb.field_names = ["Order", "Sender", "Recipiant", "Amount"]
-
-        for (i, tx) in enumerate(block['transactions']):
-            tb.add_row([i, tx['sender'], tx['recipient'], tx['amount']])
-
-        print(tb)
-
-        draw_arrow = True
-
-
-init_blockchain()
-add_transaction('Tom', 'Teo', 200)
-add_transaction('Tom', 'Ti', 200)
-add_transaction('Tony', 'Max', 200)
-add_transaction('Tony', 'Henry', 200)
-add_transaction('Tony', 'Mary', 200)
-
-add_transaction('Mary', 'Teo', 200)
-add_transaction('Teo', 'Ti', 50)
-add_transaction('Tony', 'Jerry', 10)
-add_transaction('Jerry', 'Tony', 200)
-add_transaction('Teo', 'Mary', 20)
-print_blockchain()

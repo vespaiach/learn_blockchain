@@ -1,6 +1,8 @@
 import unittest
 
-from blockchain import get_block_values, init_blockchain, add_transaction, get_balance, verify_blockchain
+from blockchain import get_blockchain_values, init_blockchain, add_transaction, get_balance, verify_blockchain
+from hashing import find_valid_hash, is_valid_hash
+from utils import print_blockchain
 
 
 class TestBlock(unittest.TestCase):
@@ -10,7 +12,7 @@ class TestBlock(unittest.TestCase):
 
     def test_initial_block(self):
         """Test the initial block function"""
-        blockchain, open_transactions, current_block_index, genesis_block = get_block_values()
+        blockchain, open_transactions, current_block_index, genesis_block = get_blockchain_values()
         self.assertEqual(blockchain, [genesis_block])
         self.assertEqual(open_transactions, [None, []])
         self.assertEqual(current_block_index, 1)
@@ -26,18 +28,19 @@ class TestBalance(unittest.TestCase):
 
     def text_balance(self):
         self.assertEqual(get_balance('Tom'), 600)
+        self.assertEqual(get_balance('Teo'), 200)
+        self.assertEqual(get_balance('Ti'), 200)
 
 
-class TestTransaction(unittest.TestCase):
+class TestAddTransaction(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         init_blockchain()
         return super().setUpClass()
 
     def test_add_transaction_success(self):
-        """Test add_transaction success"""
         result = add_transaction(sender='Tony', recipient='Jemy', amount=100)
-        blockchain, open_transactions, current_block_index, genesis_block = get_block_values()
+        blockchain, open_transactions, current_block_index, genesis_block = get_blockchain_values()
 
         open_tx = open_transactions[current_block_index]
 
@@ -47,10 +50,9 @@ class TestTransaction(unittest.TestCase):
                         'Tony' and tx['recipient'] == 'Jemy' and tx['amount'] == 100]) > 0)
 
     def test_add_transaction_fail(self):
-        """Test add_transaction fail because of exceeding balance"""
         result = add_transaction(
             sender='Tony', recipient='Max', amount=1001)
-        blockchain, open_transactions, current_block_index, genesis_block = get_block_values()
+        blockchain, open_transactions, current_block_index, genesis_block = get_blockchain_values()
 
         open_tx = open_transactions[current_block_index]
 
@@ -63,7 +65,7 @@ class TestTransaction(unittest.TestCase):
         """Test add_transaction fail because of zero balance"""
         result = add_transaction(
             sender='Guest', recipient='Max', amount=1000)
-        blockchain, open_transactions, current_block_index, genesis_block = get_block_values()
+        blockchain, open_transactions, current_block_index, genesis_block = get_blockchain_values()
 
         open_tx = open_transactions[current_block_index]
 
@@ -82,31 +84,6 @@ class TestMineBlock(unittest.TestCase):
         add_transaction('Tony', 'Max', 200)
         add_transaction('Tony', 'Henry', 200)
         add_transaction('Tony', 'Mary', 200)
-        return super().setUpClass()
-
-    def text_balance(self):
-        self.assertEqual(get_balance('Tony'), 500)
-        self.assertEqual(get_balance('Tom'), 600)
-
-    def text_block(self):
-        blockchain, open_transactions, current_block_index, genesis_block = get_block_values()
-
-        self.assertEqual(current_block_index, 2)
-        self.assertEqual(open_transactions, [None, None, []])
-        self.assertEqual(
-            blockchain[1]['hash'], '1-Tom,Teo,200-Tom,Ti,200-Tony,Max,200-Tony-Henry,200-Tony,Mary,200-REWARD,Tony,100')
-
-
-class TestVerifyBlockchain(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        init_blockchain()
-
-        add_transaction('Tom', 'Teo', 200)
-        add_transaction('Tom', 'Ti', 200)
-        add_transaction('Tony', 'Max', 200)
-        add_transaction('Tony', 'Henry', 200)
-        add_transaction('Tony', 'Mary', 200)
 
         add_transaction('Mary', 'Teo', 200)
         add_transaction('Teo', 'Ti', 50)
@@ -116,8 +93,40 @@ class TestVerifyBlockchain(unittest.TestCase):
 
         return super().setUpClass()
 
-    def text_verify_blockchain(self):
+    def test_balance(self):
+        self.assertEqual(get_balance('Tom'), 600)
+        self.assertEqual(get_balance('Tony'), 690)
+        self.assertEqual(get_balance('Teo'), 430)
+        self.assertEqual(get_balance('Ti'), 250)
+        self.assertEqual(get_balance('Max'), 1200)
+        self.assertEqual(get_balance('Mary'), 1020)
+        self.assertEqual(get_balance('Henry'), 200)
+        self.assertEqual(get_balance('Jerry'), 810)
+
+    def test_mine_a_new_block(self):
+        blockchain, open_transactions, current_block_index, genesis_block = get_blockchain_values()
+
+        print_blockchain(blockchain)
+
+        self.assertEqual(current_block_index, 3)
+        self.assertEqual(open_transactions, [None, None, None, []])
+        self.assertEqual(len(blockchain), 3)
         self.assertTrue(verify_blockchain())
+
+
+class TestHashing(unittest.TestCase):
+    def test_is_valid_hash(self):
+        self.assertFalse(is_valid_hash('sdflkasiowekrjlsdfilsdf'))
+        self.assertFalse(is_valid_hash('00234sdflkasiowekrjlsdfilsdf'))
+        self.assertFalse(is_valid_hash('s'*64))
+
+    def test_find_valid_hash(self):
+        nonce, hashed = find_valid_hash(
+            '1-Tom,Teo,200-Tom,Ti,200-Tony,Max,200-Tony-Henry,200-Tony,Mary,200-REWARD,Tony,100')
+
+        self.assertTrue(nonce >= 0)
+        self.assertTrue(len(hashed) == 64)
+        self.assertTrue(hashed[0:2] == '00')
 
 
 if __name__ == '__main__':
